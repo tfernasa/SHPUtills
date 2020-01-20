@@ -1,4 +1,6 @@
-﻿namespace SHPOperations.Clases
+﻿using Microsoft.SharePoint;
+
+namespace SHPOperations.Clases
 {
     public enum TypeColumn
     {
@@ -6,7 +8,14 @@
         Multiline = 1,
         Choice = 2,
         Number = 3,
-        Lookup = 4
+        Lookup = 4,
+        UsersAndGroups = 5
+    }
+
+    public enum TypeUserSelectionMode
+    {
+        PeopleOnly = 0,
+        PeopleAndGroups = 1
     }
 
     /// <summary>
@@ -24,6 +33,7 @@
         public SPFieldChoice FieldChoice { get; set; }
         public SPFieldNumber FieldNumber { get; set; }
         public SPFieldLookup FieldLookup { get; set; }
+        public SPFieldUsersAndGroup FieldUserGroup { get; set; }
     }
 
     /// <summary>
@@ -68,11 +78,25 @@
         public bool ShowAsPercentaje { get; set; }
     }
 
+    /// <summary>
+    /// Configuración para las columnas de tipo LOOKUP
+    /// </summary>
     public partial class SPFieldLookup
     {
         public bool ContainInformation { get; set; }
         public string LookupList { get; set; }
         public string LookupField { get; set; }
     }
-   
+
+    /// <summary>
+    /// Configuración para las columnas de tipo FIELDUSER
+    /// </summary>
+    public partial class SPFieldUsersAndGroup
+    {
+        public bool ContainInformation { get; set; }
+        public TypeUserSelectionMode UserSelectionMode { get; set; }
+        public string ShowField { get; set; }
+        public bool MultiUser { get; set; }
+        public string UsersFromGroup { get; set; }
+    }
 }

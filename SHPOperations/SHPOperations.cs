@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using Microsoft.SharePoint;
 using Microsoft.SharePoint.Client;
 using SHPOperations.Clases;
-using SP = Microsoft.SharePoint;
 
 namespace SHPOperations
 {
@@ -338,6 +337,47 @@ namespace SHPOperations
         }
 
         /// <summary>
+        /// Añade una nueva columna de tipo "UserField"
+        /// </summary>
+        /// <param name="columnName">Nombre de la columna</param>
+        /// <param name="containInformation">Idica si la columna debe de contener información (campo requerido)</param>
+        /// <param name="userSelectionMode">Especifica si se pueden indicar usuarios o usuarios y grupos</param>
+        /// <param name="showField">Campo a mostrar identificar la información del usuario a mostrar (mas info aquí: https://www.c-sharpcorner.com/blogs/setting-show-field-for-person-or-group-type-column-using-powershell-in-sharepoint2)</param>
+        /// <param name="multiUser">Opcional - Indica si el campo se ha de indicar un solo usuario o grupo (FALSE) o si es multi usuairo / grupo (TRUE)</param>
+        /// <param name="usersFromGroup">Opcional - Nombre del grupo de usuarios por el que queremos filtrar los usuarios que se pueden seleccionar o indicar en el campo</param>
+        /// <param name="listName">Opcional - Nombre de la lista en la que crear la nueva columna. Si no se indica valor, se tomará el nombre definido en la propiedad ListName</param>
+        /// <param name="description">Opcional - Descripción del campo</param>
+        public void AddNewColumn(string columnName, bool containInformation, TypeUserSelectionMode userSelectionMode, string showField, bool multiUser = false, string usersFromGroup = "", string listName = "", string description = "")
+        {
+            listName = SetListName(listName);
+
+            string type = "User";
+            if (multiUser)
+            {
+                type = "UserMulti";
+            }
+
+            SPFields field = new SPFields
+            {
+                Column = TypeColumn.UsersAndGroups,
+                ListName = listName.Trim(),
+                ColumnName = columnName.Trim(),
+                Description = description.Trim(),
+                Type = type,
+                FieldUserGroup = new Clases.SPFieldUsersAndGroup
+                {
+                    ContainInformation = containInformation,
+                    UserSelectionMode = userSelectionMode,
+                    ShowField = showField,
+                    MultiUser = multiUser,
+                    UsersFromGroup = usersFromGroup
+                }
+            };
+
+            SPFields.Add(field);
+        }
+
+        /// <summary>
         /// Lanza el proceso de creación de nuevas columnas
         /// </summary>
         /// <returns></returns>
@@ -471,22 +511,85 @@ namespace SHPOperations
                                             required = "TRUE";
                                         }
 
-                                        List sourceList = site.Web.Lists.GetByTitle(infoField.FieldLookup.LookupList);
-                                        site.Load(sourceList);
+                                        try
+                                        {
+                                            List sourceList = site.Web.Lists.GetByTitle(infoField.FieldLookup.LookupList);
+                                            site.Load(sourceList);
+
+                                            List destinationList = site.Web.Lists.GetByTitle(infoField.ListName);
+                                            site.Load(destinationList);
+
+                                            site.ExecuteQuery();
+
+                                            Field LookUpField = destinationList.Fields.AddFieldAsXml(string.Format(schemaXMLLookUp, infoField.Type, infoField.ColumnName, required, sourceList.Id, infoField.FieldLookup.LookupField), true, AddFieldOptions.DefaultValue);
+                                            LookUpField.Description = infoField.Description;
+                                            LookUpField.Update();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            SHPExecOperationsErrors.Add(GetInfoError(ex, string.Format("Alta de nuevo campo {0}", infoField.ColumnName), TypeError.Error));
+                                            continueProcess = false;
+                                        }
                                         
-                                        List destinationList = site.Web.Lists.GetByTitle(infoField.ListName);
-                                        site.Load(destinationList);
-
-                                        site.ExecuteQuery();
-
-                                        Field LookUpField = destinationList.Fields.AddFieldAsXml(string.Format(schemaXMLLookUp, infoField.Type, infoField.ColumnName, required, sourceList.Id, infoField.FieldLookup.LookupField), true, AddFieldOptions.DefaultValue);
-                                        LookUpField.Description = infoField.Description;
-                                        LookUpField.Update();
                                     }
                                     else
                                     {
                                         continueProcess = false;
                                     }
+                                    break;
+                                case TypeColumn.UsersAndGroups:
+                                    Field newField5 = list.Fields.AddFieldAsXml(string.Format(schemaXML, infoField.Type, infoField.ColumnName), true, AddFieldOptions.AddToDefaultContentType);
+                                    newField5.StaticName = infoField.ColumnName;
+                                    newField5.Description = infoField.Description;
+
+                                    if (infoField.FieldUserGroup != null)
+                                    {
+                                        FieldUser fldUser = site.CastTo<FieldUser>(newField5);
+                                        fldUser.Required = infoField.FieldUserGroup.ContainInformation;
+                                        switch (infoField.FieldUserGroup.UserSelectionMode)
+                                        {
+                                            case TypeUserSelectionMode.PeopleOnly:
+                                                fldUser.SelectionMode = FieldUserSelectionMode.PeopleOnly;
+                                                break;
+                                            case TypeUserSelectionMode.PeopleAndGroups:
+                                                fldUser.SelectionMode = FieldUserSelectionMode.PeopleAndGroups;
+                                                break;
+                                        }
+
+                                        if (infoField.FieldUserGroup.MultiUser)
+                                        {
+                                            fldUser.AllowMultipleValues = true;
+                                        }
+
+                                        if (!string.IsNullOrEmpty(infoField.FieldUserGroup.UsersFromGroup))
+                                        {
+                                            Group group = site.Web.SiteGroups.GetByName(infoField.FieldUserGroup.UsersFromGroup);
+
+                                            try
+                                            {
+                                                site.Load(group);
+                                                site.ExecuteQuery();
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                SHPExecOperationsErrors.Add(GetInfoError(ex, string.Format("Alta de nuevo campo {0}", infoField.ColumnName), TypeError.Warning));
+                                                group = null;
+                                            }
+
+                                            if (group != null)
+                                            {
+                                                fldUser.SelectionGroup = group.Id;
+                                            }
+                                            
+                                        }
+
+                                        fldUser.Update();
+                                    }
+                                    else
+                                    {
+                                        continueProcess = false;
+                                    }
+
                                     break;
                             }
 

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Microsoft.SharePoint;
 using Microsoft.SharePoint.Client;
 using SHPOperations.Clases;
+using SP = Microsoft.SharePoint;
 
 namespace SHPOperations
 {
@@ -18,6 +19,7 @@ namespace SHPOperations
         bool disposed = false;
         ClientContext site = null;
         const string schemaXML = "<Field Type='{0}' DisplayName='{1}' Name='{1}' />";
+        const string schemaXMLLookUp = "<Field Type='{0}' DisplayName='{1}' Required='{2}' List='{3}' ShowField = '{4}' StaticName = '{4}' Name = '{4}' />";
         #endregion
         //--------------------------------------------------------------------
 
@@ -258,6 +260,84 @@ namespace SHPOperations
         }
 
         /// <summary>
+        /// Añade una nueva columna de tipo "Numero"
+        /// </summary>
+        /// <param name="columnName">Nombre de la columna</param>
+        /// <param name="showAsPercentaje">Indica si el campo numerico es un campo para representar porcentajes (TRUE) o no (FALSE)</param>
+        /// <param name="minValue">Valor numérico mínimo para el campo (null si no desea indicar valor mínimo)</param>
+        /// <param name="MaxValue">Valor numérico máximo para el campo (null si no desea indicar valor máximo)</param>
+        /// <param name="listName">Opcional - Nombre de la lista en la que crear la nueva columna. Si no se indica valor, se tomará el nombre definido en la propiedad ListName</param>
+        /// <param name="description">Opcional - Descripción del campo</param>
+        public void AddNewColumn(string columnName, bool showAsPercentaje, Nullable<double> minValue, Nullable<double> maxValue, string listName = "", string description = "")
+        {
+            listName = SetListName(listName);
+
+            SPFields field = new SPFields
+            {
+                Column = TypeColumn.Number,
+                ListName = listName.Trim(),
+                ColumnName = columnName.Trim(),
+                Description = description.Trim(),
+                Type = "Number",
+                FieldNumber = new Clases.SPFieldNumber
+                {
+                    ShowAsPercentaje = showAsPercentaje
+                }
+            };
+
+            //Campos nulos
+            if (double.TryParse(minValue.ToString(), out double Value1))
+            {
+                field.FieldNumber.MinValue = Value1;
+            }
+
+            if (double.TryParse(maxValue.ToString(), out double Value2))
+            {
+                field.FieldNumber.MaxValue = Value2;
+            }
+
+            if ((field.FieldNumber.MinValue != 0) && (field.FieldNumber.MaxValue != 0) && (field.FieldNumber.MinValue > field.FieldNumber.MaxValue))
+            {
+                //Si se da la casualidad de que el valor minimo indicado es mayor al valor máximo, anulamos ambos valores (quitamos minimo y maximo)
+                field.FieldNumber.MinValue = 0;
+                field.FieldNumber.MaxValue = 0;
+            }
+
+            SPFields.Add(field);
+        }
+
+        /// <summary>
+        /// Añade una nueva columna de tipo "Lookup"
+        /// </summary>
+        /// <param name="columnName">Nombre de la columna</param>
+        /// <param name="containInformation">Idica si la columna debe de contener información (campo requerido)</param>
+        /// <param name="listName">Opcional - Nombre de la lista en la que crear la nueva columna. Si no se indica valor, se tomará el nombre definido en la propiedad ListName</param>
+        /// <param name="lookupList">Nombre de la lista con la cual se desea vincular el campo de busqueda</param>
+        /// <param name="lookupField">Nombre del campo a mostrar</param>
+        ///<param name="description">Opcional - Descripción del campo</param>
+        public void AddNewColumn(string columnName, bool containInformation, string lookupList, string lookupField, string listName = "", string description = "")
+        {
+            listName = SetListName(listName);
+
+            SPFields field = new SPFields
+            {
+                Column = TypeColumn.Lookup,
+                ListName = listName.Trim(),
+                ColumnName = columnName.Trim(),
+                Description = description.Trim(),
+                Type = "Lookup",
+                FieldLookup = new Clases.SPFieldLookup
+                {
+                    ContainInformation = containInformation,
+                    LookupList = lookupList,
+                    LookupField = lookupField
+                }
+            };
+
+            SPFields.Add(field);
+        }
+
+        /// <summary>
         /// Lanza el proceso de creación de nuevas columnas
         /// </summary>
         /// <returns></returns>
@@ -286,18 +366,18 @@ namespace SHPOperations
 
                         if (continueProcess)
                         {
-                            Field newField = list.Fields.AddFieldAsXml(string.Format(schemaXML, infoField.Type, infoField.ColumnName), true, AddFieldOptions.AddToDefaultContentType);
-                            newField.StaticName = infoField.ColumnName;
-                            newField.Description = infoField.Description;
-
                             //Configuramos...
                             switch (infoField.Column)
                             {
                                 case TypeColumn.LineOfText:
                                     //Linea de texto
+                                    Field newField1 = list.Fields.AddFieldAsXml(string.Format(schemaXML, infoField.Type, infoField.ColumnName), true, AddFieldOptions.AddToDefaultContentType);
+                                    newField1.StaticName = infoField.ColumnName;
+                                    newField1.Description = infoField.Description;
+
                                     if (infoField.FieldText != null)
                                     {
-                                        FieldText fldText = site.CastTo<FieldText>(newField);
+                                        FieldText fldText = site.CastTo<FieldText>(newField1);
                                         fldText.Required = infoField.FieldText.ContainInformation;
                                         fldText.EnforceUniqueValues = infoField.FieldText.UniqueValues;
                                         fldText.MaxLength = infoField.FieldText.MaxLength;
@@ -315,9 +395,13 @@ namespace SHPOperations
                                     break;
                                 case TypeColumn.Multiline:
                                     //Varias líneas de texto
+                                    Field newField2 = list.Fields.AddFieldAsXml(string.Format(schemaXML, infoField.Type, infoField.ColumnName), true, AddFieldOptions.AddToDefaultContentType);
+                                    newField2.StaticName = infoField.ColumnName;
+                                    newField2.Description = infoField.Description;
+
                                     if (infoField.FieldMultiText!= null)
                                     {
-                                        FieldMultiLineText fldMultiLine = site.CastTo<FieldMultiLineText>(newField);
+                                        FieldMultiLineText fldMultiLine = site.CastTo<FieldMultiLineText>(newField2);
                                         fldMultiLine.Required = infoField.FieldMultiText.ContainInformation;
                                         fldMultiLine.NumberOfLines = infoField.FieldMultiText.NumLines;
                                         fldMultiLine.RichText = infoField.FieldMultiText.RichText;
@@ -330,9 +414,13 @@ namespace SHPOperations
                                     break;
                                 case TypeColumn.Choice:
                                     //Eleccion
+                                    Field newField3 = list.Fields.AddFieldAsXml(string.Format(schemaXML, infoField.Type, infoField.ColumnName), true, AddFieldOptions.AddToDefaultContentType);
+                                    newField3.StaticName = infoField.ColumnName;
+                                    newField3.Description = infoField.Description;
+
                                     if (infoField.FieldChoice!=null)
                                     {
-                                        FieldMultiChoice fldChoice = site.CastTo<FieldMultiChoice>(newField);
+                                        FieldMultiChoice fldChoice = site.CastTo<FieldMultiChoice>(newField3);
                                         fldChoice.Required = infoField.FieldChoice.ContainInformation;
                                         fldChoice.EnforceUniqueValues = infoField.FieldChoice.UniqueValues;
                                         fldChoice.DefaultValue = infoField.FieldChoice.DefaultValue;
@@ -342,6 +430,58 @@ namespace SHPOperations
                                         }
                                         fldChoice.Choices = infoField.FieldChoice.Options;
                                         fldChoice.Update();
+                                    }
+                                    else
+                                    {
+                                        continueProcess = false;
+                                    }
+                                    break;
+                                case TypeColumn.Number:
+                                    //Numero
+                                    Field newField4 = list.Fields.AddFieldAsXml(string.Format(schemaXML, infoField.Type, infoField.ColumnName), true, AddFieldOptions.AddToDefaultContentType);
+                                    newField4.StaticName = infoField.ColumnName;
+                                    newField4.Description = infoField.Description;
+
+                                    if (infoField.FieldNumber != null)
+                                    {
+                                        FieldNumber fldNumber = site.CastTo<FieldNumber>(newField4);
+                                        fldNumber.ShowAsPercentage = infoField.FieldNumber.ShowAsPercentaje;
+                                        if (infoField.FieldNumber.MinValue != 0)
+                                        {
+                                            fldNumber.MinimumValue = infoField.FieldNumber.MinValue;
+                                        }
+                                        if (infoField.FieldNumber.MaxValue != 0)
+                                        {
+                                            fldNumber.MaximumValue = infoField.FieldNumber.MaxValue;
+                                        }
+
+                                        fldNumber.Update();
+                                    }
+                                    else
+                                    {
+                                        continueProcess = false;
+                                    }
+                                    break;
+                                case TypeColumn.Lookup:
+                                    if (infoField.FieldLookup != null)
+                                    {
+                                        string required = "FALSE";
+                                        if (infoField.FieldLookup.ContainInformation)
+                                        {
+                                            required = "TRUE";
+                                        }
+
+                                        List sourceList = site.Web.Lists.GetByTitle(infoField.FieldLookup.LookupList);
+                                        site.Load(sourceList);
+                                        
+                                        List destinationList = site.Web.Lists.GetByTitle(infoField.ListName);
+                                        site.Load(destinationList);
+
+                                        site.ExecuteQuery();
+
+                                        Field LookUpField = destinationList.Fields.AddFieldAsXml(string.Format(schemaXMLLookUp, infoField.Type, infoField.ColumnName, required, sourceList.Id, infoField.FieldLookup.LookupField), true, AddFieldOptions.DefaultValue);
+                                        LookUpField.Description = infoField.Description;
+                                        LookUpField.Update();
                                     }
                                     else
                                     {
